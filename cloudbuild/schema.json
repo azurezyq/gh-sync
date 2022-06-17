@@ -1,0 +1,132 @@
+[
+  {
+    "name": "repo",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "additions",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "assignees",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "author",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "baseRefName",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "body",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "changedFiles",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "closed",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "closedAt",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "comments",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "createdAt",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "deletions",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "files",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "isDraft",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "labels",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "latestReviews",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "mergedAt",
+    "type": "timestamp",
+    "mode": "nullable"
+  },
+  {
+    "name": "mergedBy",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "number",
+    "type": "integer",
+    "mode": "nullable"
+  },
+  {
+    "name": "owner",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "reviewDecision",
+    "type": "STRING",
+    "mode": "nullable"
+  },
+  {
+    "name": "reviews",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "state",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "title",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "url",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "updatedAt",
+    "type": "TIMESTAMP",
+    "mode": "nullable"
+  }
+]

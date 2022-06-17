@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/wget'
+  entrypoint: 'bash'
+  args: ['-c', 'wget https://github.com/cli/cli/releases/download/v2.12.1/gh_2.12.1_linux_amd64.tar.gz && mkdir gh && tar zxf gh_2.12.1_linux_amd64.tar.gz -C gh --strip-components=1']
+- name: 'gcr.io/cloud-builders/docker'
+  entrypoint: 'bash'
+  args: ['-c', './sync.py --gh_bin=gh/bin/gh --out=result.json']
+  secretEnv: ['GITHUB_TOKEN']
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'bash'
+  args: ['-c', 'bq load --replace --source_format=NEWLINE_DELIMITED_JSON --format=json github.pull_requests result.json schema.json']
+availableSecrets:
+  secretManager:
+  - versionName: projects/27323915999/secrets/yunqing-github-cloudbuild/versions/1
+    env: 'GITHUB_TOKEN'
