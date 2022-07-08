@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 parser = argparse.ArgumentParser(description='Process some integers.')
 
 thirty_days_ago = datetime.today() - timedelta(days=30)
+fifteen_days_ago = datetime.today() - timedelta(days=15)
 START_TIME = thirty_days_ago.strftime('%Y-%m-%d')
 
 def InvokeGH(cmd):
@@ -36,7 +37,9 @@ PR_COLUMNS = [
 
 
 def GetPullRequests(gh_bin, start_date, owner, repo):
-  prs = InvokeGH('{} pr list -L 1000 -R {}/{} -s all -S "created:>{}" --json={}'.format(gh_bin, owner, repo, start_date, ','.join(PR_COLUMNS)))
+  prs = []
+  prs.extend(InvokeGH('{} pr list -L 1000 -R {}/{} -s all -S "created:>{} created:<{}" --json={}'.format(gh_bin, owner, repo, start_date, fifteen_days_ago, ','.join(PR_COLUMNS))))
+  prs.extend(InvokeGH('{} pr list -L 1000 -R {}/{} -s all -S "created:>={}" --json={}'.format(gh_bin, owner, repo, fifteen_days_ago, ','.join(PR_COLUMNS))))
   for pr in prs:
     pr['repo'] = repo
     pr['owner'] = owner
