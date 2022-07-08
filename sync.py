@@ -2,17 +2,15 @@
 import json
 import subprocess
 import argparse
+import traceback
 from datetime import datetime, timedelta
 
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 
 thirty_days_ago = datetime.today() - timedelta(days=30)
-fifteen_days_ago = datetime.today() - timedelta(days=15)
-MID_TIME = fifteen_days_ago.strftime('%Y-%m-%d')
-START_TIME = thirty_days_ago.strftime('%Y-%m-%d')
 START_DATE = thirty_days_ago
-TIME_DELTA = timedelta(days=10)
+DEFAULT_TIME_DELTA = timedelta(days=10)
 
 def FormatDate(d):
   return d.strftime('%Y-%m-%d')
@@ -41,16 +39,26 @@ PR_COLUMNS = [
 		'updatedAt',
 		'url',]
 
+def GetPullRequestsWithFallback(gh_bin, start_date, owner, repo):
+  try:
+    return GetPullRequests(gh_bin, start_date, owner, repo)
+  except:
+    traceback.print_exc()
+    return GetPullRequests(gh_bin, start_date, owner, repo, step=timedelta(days=10))
 
-def GetPullRequests(gh_bin, start_date, owner, repo):
+
+def GetPullRequests(gh_bin, start_date, owner, repo, step=None):
   prs = []
-  start = start_date
-  while start <= datetime.today():
-    start_str = FormatDate(start)
-    end_str = FormatDate(start + TIME_DELTA)
-    prs.extend(InvokeGH(f'{gh_bin} pr list -L 1000 -R {owner}/{repo} -s all -S "created:>={start_str} created:<{end_str}" --json={",".join(PR_COLUMNS)}'))
-    print(len(prs))
-    start += TIME_DELTA
+  if step:
+    start = start_date
+    while start <= datetime.today():
+      start_str = FormatDate(start)
+      end_str = FormatDate(start + step)
+      prs.extend(InvokeGH(f'{gh_bin} pr list -L 1000 -R {owner}/{repo} -s all -S "created:>={start_str} created:<{end_str}" --json={",".join(PR_COLUMNS)}'))
+      start += step
+  else:
+    start_str = FormatDate(start_date)
+    prs = InvokeGH(f'{gh_bin} pr list -L 1000 -R {owner}/{repo} -s all -S "created:>={start_str}" --json={",".join(PR_COLUMNS)}')
   for pr in prs:
     pr['repo'] = repo
     pr['owner'] = owner
@@ -77,7 +85,7 @@ if __name__ == '__main__':
     repos = list(GetRepos(args.gh_bin, owner))
     for repo in repos:
       print(owner, repo)
-      result.extend(GetPullRequests(args.gh_bin, START_DATE, owner, repo))
+      result.extend(GetPullRequestsWithFallback(args.gh_bin, START_DATE, owner, repo))
       print(len(result))
   with open(args.out, 'w') as fp:
     for x in result:
