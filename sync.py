@@ -54,15 +54,16 @@ def GetRepos(gh_bin, owner):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='github PR sync')
-  parser.add_argument('--owner', type=str, nargs='?', default='tidbcloud')
+  parser.add_argument('--owners', type=str, nargs='?', default='tidbcloud')
   parser.add_argument('--gh_bin', type=str, nargs='?', default='gh')
   parser.add_argument('--out', type=str, nargs='?', default='/tmp/result.json')
   args = parser.parse_args()
   result = []
-  repos = list(GetRepos(args.gh_bin, args.owner))
-  print(repos)
-  for repo in repos:
-    result.extend(GetPullRequests(args.gh_bin, START_TIME, args.owner, repo))
+  for owner in args.owner.strip().split(','):
+    repos = list(GetRepos(args.gh_bin, owner))
+    for repo in repos:
+      print(owner, repo)
+      result.extend(GetPullRequests(args.gh_bin, START_TIME, args.owner, repo))
   with open(args.out, 'w') as fp:
     for x in result:
       json.dump(x, fp)
