@@ -1,0 +1,94 @@
+[
+  {
+    "name": "id",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "recordTimestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "additions",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "deletions",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "author",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "state",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "createdAt",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "updatedAt",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "closedAt",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "title",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "url",
+    "type": "string",
+    "mode": "nullable"
+  },
+  {
+    "name": "body",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "owner",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "repo",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "reviews",
+    "type": "RECORD",
+    "mode": "REPEATED",
+    "fields" : [
+      {
+        "name": "user",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "submittedAt",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "state",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  }
+]
