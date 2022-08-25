@@ -7,6 +7,17 @@ import os
 import re
 from retry import retry
 import time
+import collections
+from dataclasses import dataclass
+
+
+@dataclass
+class Context:
+  excluded_users : dict
+  client : Github
+  output_fp : ...
+  repo : str = ''
+  owner : str = ''
 
 
 @retry(tries=3, delay=2)
@@ -29,7 +40,7 @@ def GetReviews(pr):
 
 
 @retry(tries=3, delay=2)
-def ToObject(pr):
+def ToObject(ctx, pr):
   now = datetime.utcnow()
   return {
       'id' : pr.id,
@@ -45,30 +56,29 @@ def ToObject(pr):
       'url' : ConvertUrl(pr.url),
       'body' : pr.body,
       'reviews' : GetReviews(pr),
+      'repo' : ctx.repo,
+      'owner' : ctx.owner,
       }
 
-def RateLimit(config):
-  remaining, _ = config['client'].rate_limiting
+def RateLimit(ctx):
+  remaining, _ = ctx.client.rate_limiting
   print('rate limiting remaining', remaining)
   while remaining < 200:
     time.sleep(60)
-    remaining, _ = config['client'].rate_limiting
+    remaining, _ = ctx.client.rate_limiting
     print('rate limiting remaining', remaining)
 
 
-
 @retry(tries=3, delay=2)
-def GetPullRequests(config, repo):
-  result = []
-  i = 0
+def WritePullRequests(ctx, repo):
   for pr in repo.get_pulls(state='all'):
     print(pr.number)
-    RateLimit(config)
-    time.sleep(config['sleep_between_gets'])
-    if pr.user.login in config['exclude_users']:
+    RateLimit(ctx)
+    if pr.user.login in ctx.excluded_users:
       continue
-    result.append(ToObject(pr))
-  return result
+    o = ToObject(ctx, pr)
+    json.dump(o, ctx.output_fp)
+    ctx.output_fp.write('\n')
 
 def ToISO(d):
   if not d:
@@ -87,24 +97,19 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='github PR sync')
   parser.add_argument('--owners', type=str, nargs='?', default='tidbcloud')
   parser.add_argument('--out', type=str, nargs='?', default='/tmp/result.jsonl')
-  parser.add_argument('--sleep_between_gets', type=int, nargs='?', default=0)
   parser.add_argument('--exclude_users', type=str, nargs='?', default='tidbcloud-bot,github-actions,ti-srebot,ti-chi-bot,dependabot')
   args = parser.parse_args()
   g = Github(os.environ['GITHUB_TOKEN'])
-  config = {
-      'exclude_users' : args.exclude_users.strip().split(','),
-      'sleep_between_gets' : args.sleep_between_gets,
-      'client' : g,
-      }
   with open(args.out, 'w') as fp:
+    ctx = Context(
+        excluded_users=args.exclude_users.strip().split(','),
+        client=g,
+        output_fp=fp
+        )
     for owner in args.owners.strip().split(','):
       repos = GetRepos(g, owner)
       for repo in repos:
         print(owner, repo.name)
-        prs = GetPullRequests(config, repo)
-        for pr in prs:
-          pr['repo'] = repo.name
-          pr['owner'] = owner
-        json.dump(pr, fp)
-        fp.write('\n')
-        fp.flush()
+        ctx.repo = repo.name
+        ctx.owner = owner
+        WritePullRequests(ctx, repo)
