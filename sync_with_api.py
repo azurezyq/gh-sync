@@ -52,7 +52,7 @@ def RateLimit(config):
   print('rate limiting remaining', remaining)
   while remaining < 200:
     time.sleep(60)
-    remaining = config['client'].rate_limiting
+    remaining, _ = config['client'].rate_limiting
     print('rate limiting remaining', remaining)
 
 
