@@ -96,19 +96,14 @@ if __name__ == '__main__':
       'sleep_between_gets' : args.sleep_between_gets,
       'client' : g,
       }
-  result = []
-  for owner in args.owners.strip().split(','):
-    repos = GetRepos(g, owner)
-    for repo in repos:
-      print(owner, repo.name)
-      prs = GetPullRequests(config, repo)
-      for pr in prs:
-        pr['repo'] = repo.name
-        pr['owner'] = owner
-      result.extend(prs)
-    break
   with open(args.out, 'w') as fp:
-    for x in result:
-      json.dump(x, fp)
-      fp.write('\n')
-
+    for owner in args.owners.strip().split(','):
+      repos = GetRepos(g, owner)
+      for repo in repos:
+        print(owner, repo.name)
+        prs = GetPullRequests(config, repo)
+        for pr in prs:
+          pr['repo'] = repo.name
+          pr['owner'] = owner
+        json.dump(pr, fp)
+        fp.write('\n')
