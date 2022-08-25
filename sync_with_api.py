@@ -107,3 +107,4 @@ if __name__ == '__main__':
           pr['owner'] = owner
         json.dump(pr, fp)
         fp.write('\n')
+        fp.flush()
