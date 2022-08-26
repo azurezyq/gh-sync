@@ -60,12 +60,17 @@ def ToObject(ctx, pr):
       'owner' : ctx.owner,
       }
 
+r_count = 0
 def RateLimit(ctx):
-  remaining, _ = ctx.client.rate_limiting
+  global r_count
+  r_count += 1
+  if r_count % 10 != 0:
+    return
+  remaining = ctx.client.get_rate_limit().core.remaining
   print('rate limiting remaining', remaining)
   while remaining < 200:
     time.sleep(60)
-    remaining, _ = ctx.client.rate_limiting
+    remaining = ctx.client.get_rate_limit().core.remaining
     print('rate limiting remaining', remaining)
 
 
