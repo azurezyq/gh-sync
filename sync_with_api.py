@@ -121,7 +121,6 @@ def WritePullRequests(ctx):
   for pr in ctx.gh.ListPulls(ctx.owner, ctx.repo):
     pr_id = pr['id']
     if pr_id in ctx.known and ctx.known[pr_id] == pr['updated_at']:
-      print('skip', pr['number'])
       continue
     if pr['user']['login'] in ctx.excluded_users:
       continue
@@ -144,10 +143,11 @@ def ParseProgress(progress_file):
   if not progress_file:
     return
   d = {}
-  for l in open(progress_file):
-    o = json.loads(l)
-    i = o['id']
-    updated_at = o['updatedAt']
+  for index, l in enumerate(open(progress_file)):
+    if index == 0:
+      continue
+    id_str, updated_at = l.strip().split(',')
+    i = int(id_str)
     if (i not in d) or d[i] < updated_at:
       d[i] = updated_at
   return d
@@ -157,7 +157,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='github PR sync')
   parser.add_argument('--owners', type=str, nargs='?', default='tidbcloud')
   parser.add_argument('--out', type=str, nargs='?', default='/tmp/result.jsonl')
-  parser.add_argument('--exclude_users', type=str, nargs='?', default='tidbcloud-bot,github-actions,ti-srebot,ti-chi-bot,dependabot')
+  parser.add_argument('--exclude_users', type=str, nargs='?', default='tidbcloud-bot,github-actions,ti-srebot,ti-chi-bot,dependabot,github-actions[bot]')
   parser.add_argument('--progress_file', type=str, nargs='?', default='')
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
