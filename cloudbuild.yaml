@@ -8,7 +8,7 @@ steps:
   secretEnv: ['GITHUB_TOKEN']
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
-  args: ['-c', 'bq load --replace --source_format=NEWLINE_DELIMITED_JSON --format=json github.pull_requests result.json schema.json']
+  args: ['-c', 'wc -l result.json && bq load --replace --source_format=NEWLINE_DELIMITED_JSON --format=json github.pull_requests result.json schema.json']
 availableSecrets:
   secretManager:
   - versionName: projects/27323915999/secrets/yunqing-github-cloudbuild/versions/1
