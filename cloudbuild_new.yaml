@@ -14,6 +14,6 @@ steps:
   args: ['-c', 'bq load --source_format=NEWLINE_DELIMITED_JSON --format=json github.pull_requests_exp result.jsonl schema_extended.json']
 availableSecrets:
   secretManager:
-  - versionName: projects/27323915999/secrets/yunqing-github-cloudbuild/versions/1
+  - versionName: projects/27323915999/secrets/yunqing-github-cloudbuild/versions/latest
     env: 'GITHUB_TOKEN'
 timeout: 3600s
