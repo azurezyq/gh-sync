@@ -71,6 +71,7 @@ class GHClient:
         }
     url = f'https://api.github.com{path}'
     r = self.session.get(url, headers=headers, params=params, timeout=10)
+    r.raise_for_status()
     logging.info('GET %s', r.url)
     return r.json()
 
