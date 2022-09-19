@@ -1,5 +1,5 @@
 steps:
-- name: 'python'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'pip'
   args: ["install", "-r", "requirements.txt", "--user"]
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

@@ -175,7 +175,7 @@ class PullRequestWalker:
       o = self.ToObject(owner, repo, pr)
       yield o
 
-  def WalkPullRequests(self, repos : list[tuple[str, str]]):
+  def WalkPullRequests(self, repos):
     RL_REMAINING_THRESHOLD = 500
     UPLOAD_BATCH = 200
     prs = []
