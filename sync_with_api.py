@@ -138,7 +138,7 @@ class PullRequestWalker:
     rs = []
     for r in self.gh.GetReviews(owner, repo, pr['number']):
       rs.append({
-        'user' : r['user']['login'],
+        'user' : r.get('user', {}).get('login')
         'state' : r['state'],
         'submittedAt' : r['submitted_at'],
         })
@@ -151,7 +151,7 @@ class PullRequestWalker:
         'recordTimestamp' : ToISO(now),
         'additions' : pr['additions'],
         'deletions' : pr['deletions'],
-        'author' : pr['user']['login'],
+        'author' : pr.get('user', {}).get('login'),
         'state' : pr['state'],
         'createdAt' : pr['created_at'],
         'updatedAt' : pr['updated_at'],
