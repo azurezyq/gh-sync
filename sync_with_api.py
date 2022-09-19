@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import argparse
+import retry
 from datetime import datetime
 import os
 import re
@@ -8,53 +9,74 @@ import time
 from dataclasses import dataclass
 import requests
 import copy
+import subprocess
+import logging
+import sys
+
+FORMAT = '%(asctime)s %(filename)s:%(lineno)s %(funcName)s %(message)s'
+logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
+
+
+def ToISO(d):
+  if not d:
+    return None
+  return d.isoformat() + 'Z'
+
+
+def ConvertUrl(url):
+  return re.sub('https://api.github.com/repos/([^/]+)/([^/]+)/pulls/([0-9]+)',
+      r'https://github.com/\1/\2/pull/\3',
+      url)
+
+
+def ParseProgress(progress_file):
+  if not progress_file:
+    return {}
+  d = {}
+  for index, l in enumerate(open(progress_file)):
+    if index == 0:
+      continue
+    id_str, updated_at = l.strip().split(',')
+    i = int(id_str)
+    if (i not in d) or d[i] < updated_at:
+      d[i] = updated_at
+  return d
+
+
+def Execute(cmd):
+  logging.info('Execute %s', cmd)
+  return subprocess.check_call(cmd, shell=True)
+
 
 class GHClient:
   def __init__(self, token):
     self.token = token
     self.session = requests.Session()
     self.r_count = 0
+    self.remaining = 0
 
-  def _RateLimit(self):
-    self.r_count += 1
-    if self.r_count % 10 != 0:
-      return
-    remaining = self.GetRateLimit()['remaining']
-    print('rate limiting remaining', remaining)
-    while remaining < 100:
-      time.sleep(60)
-      remaining = self.GetRateLimit()['remaining']
-      print('rate limiting remaining', remaining)
-
-
+  @retry.retry(tries=2)
   def _Get(self, path, params={}):
-    self._RateLimit()
-    return self._GetNoDelay(path, params)
-
-
-  def _GetNoDelay(self, path, params={}):
     headers = {
         'Accept' : 'application/vnd.github+json',
         'Authorization' : f'token {self.token}',
         }
     url = f'https://api.github.com{path}'
-    r = self.session.get(url, headers=headers, params=params)
-    print('GET', r.url)
+    r = self.session.get(url, headers=headers, params=params, timeout=10)
+    logging.info('GET %s', r.url)
     return r.json()
 
   def _ListMultiPage(self, path, params={}):
-    result = []
     page = 1
     p = copy.copy(params)
     while True:
       p['per_page'] = 100
       p['page'] = page
       r = self._Get(path, p)
-      result.extend(r)
+      yield from r
       if len(r) < 100:
         break
       page += 1
-    return result
 
   def ListRepos(self, owner):
     return self._ListMultiPage(f'/orgs/{owner}/repos', {'type' : 'all'})
@@ -69,108 +91,140 @@ class GHClient:
     return self._ListMultiPage(f'/repos/{owner}/{repo}/pulls/{number}/reviews')
 
   def GetRateLimit(self):
-    return self._GetNoDelay('/rate_limit')['resources']['core']
+    return self._Get('/rate_limit')['resources']['core']
+
+  def GetRateLimitRemainingCached(self):
+    self.r_count += 1
+    if not self.remaining or self.r_count % 10 == 0:
+      self.remaining = self.GetRateLimit()['remaining']
+      logging.info('rate limiting remaining %s', self.remaining)
+    return self.remaining
 
 
-@dataclass
-class Context:
-  excluded_users : dict
-  gh : GHClient
-  output_fp : ...
-  repo : str = ''
-  owner : str = ''
-  known : dict = None
+class BigQueryUploader:
+  def __init__(self, table, schema):
+    self.table = table
+    self.schema = schema
+
+  def Upload(self, prs):
+    with open('/tmp/result_bq.jsonl', 'w') as fp:
+      for pr in prs:
+        json.dump(pr, fp)
+        fp.write('\n')
+    Execute(f'bq load --source_format=NEWLINE_DELIMITED_JSON --format=json {self.table} /tmp/result_bq.jsonl {self.schema}')
 
 
-def GetRepos(ctx, owner):
-  return ctx.gh.ListRepos(owner)
+class FileUploader:
+  def __init__(self, filename):
+    self.filename = filename
+    with open(self.filename, 'w') as fp:
+      pass
 
-def GetReviews(ctx, pr):
-  rs = []
-  for r in ctx.gh.GetReviews(ctx.owner, ctx.repo, pr['number']):
-    rs.append({
-      'user' : r['user']['login'],
-      'state' : r['state'],
-      'submittedAt' : r['submitted_at'],
-      })
-  return rs
-
-
-def ToObject(ctx, pr):
-  now = datetime.utcnow()
-  return {
-      'id' : pr['id'],
-      'recordTimestamp' : ToISO(now),
-      'additions' : pr['additions'],
-      'deletions' : pr['deletions'],
-      'author' : pr['user']['login'],
-      'state' : pr['state'],
-      'createdAt' : pr['created_at'],
-      'updatedAt' : pr['updated_at'],
-      'closedAt' : pr['closed_at'],
-      'title' : pr['title'],
-      'url' : ConvertUrl(pr['url']),
-      'body' : pr['body'],
-      'reviews' : GetReviews(ctx, pr),
-      'repo' : ctx.repo,
-      'owner' : ctx.owner,
-      }
+  def Upload(self, prs):
+    with open(self.filename, 'a') as fp:
+      for pr in prs:
+        json.dump(pr, fp)
+        fp.write('\n')
 
 
-def WritePullRequests(ctx):
-  for pr in ctx.gh.ListPulls(ctx.owner, ctx.repo):
-    pr_id = pr['id']
-    if pr_id in ctx.known and ctx.known[pr_id] == pr['updated_at']:
-      continue
-    if pr['user']['login'] in ctx.excluded_users:
-      continue
-    pr = ctx.gh.GetPull(ctx.owner, ctx.repo, pr['number'])
-    o = ToObject(ctx, pr)
-    json.dump(o, ctx.output_fp)
-    ctx.output_fp.write('\n')
+class PullRequestWalker:
+  def __init__(self, github_client, uploader, known={}, excluded_users=[]):
+    self.gh = github_client
+    self.known = known
+    self.excluded_users = excluded_users
+    self.uploader = uploader
 
-def ToISO(d):
-  if not d:
-    return None
-  return d.isoformat() + 'Z'
+  def GetReviews(self, owner, repo, pr):
+    rs = []
+    for r in self.gh.GetReviews(owner, repo, pr['number']):
+      rs.append({
+        'user' : r['user']['login'],
+        'state' : r['state'],
+        'submittedAt' : r['submitted_at'],
+        })
+    return rs
 
-def ConvertUrl(url):
-  return re.sub('https://api.github.com/repos/([^/]+)/([^/]+)/pulls/([0-9]+)',
-      r'https://github.com/\1/\2/pull/\3',
-      url)
+  def ToObject(self, owner, repo, pr):
+    now = datetime.utcnow()
+    return {
+        'id' : pr['id'],
+        'recordTimestamp' : ToISO(now),
+        'additions' : pr['additions'],
+        'deletions' : pr['deletions'],
+        'author' : pr['user']['login'],
+        'state' : pr['state'],
+        'createdAt' : pr['created_at'],
+        'updatedAt' : pr['updated_at'],
+        'closedAt' : pr['closed_at'],
+        'title' : pr['title'],
+        'url' : ConvertUrl(pr['url']),
+        'body' : pr['body'],
+        'reviews' : self.GetReviews(owner, repo, pr),
+        'repo' : repo,
+        'owner' : owner,
+        }
 
-def ParseProgress(progress_file):
-  if not progress_file:
-    return
-  d = {}
-  for index, l in enumerate(open(progress_file)):
-    if index == 0:
-      continue
-    id_str, updated_at = l.strip().split(',')
-    i = int(id_str)
-    if (i not in d) or d[i] < updated_at:
-      d[i] = updated_at
-  return d
+  def GetPullRequests(self, owner, repo):
+    for pr in self.gh.ListPulls(owner, repo):
+      pr_id = pr['id']
+      if self.known.get(pr_id, None) == pr['updated_at']:
+        continue
+      if pr['user']['login'] in self.excluded_users:
+        continue
+      pr = self.gh.GetPull(owner, repo, pr['number'])
+      o = self.ToObject(owner, repo, pr)
+      yield o
+
+  def WalkPullRequests(self, repos : list[tuple[str, str]]):
+    RL_REMAINING_THRESHOLD = 500
+    UPLOAD_BATCH = 200
+    prs = []
+    for owner, repo in repos:
+      logging.info('%s %s', repo, owner)
+      rl_hit = False
+      for pr in self.GetPullRequests(owner, repo):
+        prs.append(pr)
+        if len(prs) > UPLOAD_BATCH:
+          self.uploader.Upload(prs)
+          prs = []
+        if self.gh.GetRateLimitRemainingCached() < RL_REMAINING_THRESHOLD:
+          logging.warning('rate limit hit, finish for now.')
+          rl_hit = True
+          break
+      if rl_hit:
+        break
+    if prs:
+      self.uploader.Upload(prs)
 
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='github PR sync')
-  parser.add_argument('--owners', type=str, nargs='?', default='tidbcloud')
-  parser.add_argument('--out', type=str, nargs='?', default='/tmp/result.jsonl')
+  parser.add_argument('--selectors', type=str, nargs='?', default='tidbcloud/*')
+  parser.add_argument('--out', type=str, nargs='?', default='')
   parser.add_argument('--exclude_users', type=str, nargs='?', default='tidbcloud-bot,github-actions,ti-srebot,ti-chi-bot,dependabot,github-actions[bot]')
   parser.add_argument('--progress_file', type=str, nargs='?', default='')
+  parser.add_argument('--bq_table', type=str, nargs='?', default='github.pull_requests_exp')
+  parser.add_argument('--bq_schema', type=str, nargs='?', default='schema_extended.json')
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
-  with open(args.out, 'w') as fp:
-    ctx = Context(
-        excluded_users=args.exclude_users.strip().split(','),
-        gh=gh,
-        output_fp=fp,
-        known=ParseProgress(args.progress_file)
-        )
-    for owner in args.owners.strip().split(','):
-      repos = GetRepos(ctx, owner)
-      for repo in repos:
-        ctx.repo = repo['name']
-        ctx.owner = owner
-        WritePullRequests(ctx)
+  if args.out:
+    uploader = FileUploader(args.out)
+  else:
+    uploader = BigQueryUploader(args.bq_table, args.bq_schema)
+  w = PullRequestWalker(gh, uploader, known=ParseProgress(args.progress_file), excluded_users=args.exclude_users.strip().split(','))
+  repo_pairs = []
+  for selector in args.selectors.strip().split(','):
+    owner, repo = selector.split('/')
+    if repo == '*':
+      for r in gh.ListRepos(owner):
+        repo_pairs.append((owner, r['name']))
+    else:
+      repo_pairs.append((owner, repo))
+  dedup_set = set()
+  unique_repo_pairs = []
+  for x in repo_pairs:
+    if x in dedup_set:
+      continue
+    unique_repo_pairs.append(x)
+    dedup_set.add(x)
+  w.WalkPullRequests(unique_repo_pairs)
