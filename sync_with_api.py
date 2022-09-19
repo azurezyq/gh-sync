@@ -17,6 +17,14 @@ FORMAT = '%(asctime)s %(filename)s:%(lineno)s %(funcName)s %(message)s'
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
 
 
+def ExtractUser(x):
+  u = x.get('user')
+  if u:
+    return x.get('login')
+  else:
+    return None
+
+
 def ToISO(d):
   if not d:
     return None
@@ -138,7 +146,7 @@ class PullRequestWalker:
     rs = []
     for r in self.gh.GetReviews(owner, repo, pr['number']):
       rs.append({
-        'user' : r.get('user', {}).get('login'),
+        'user' : ExtractUser(r),
         'state' : r['state'],
         'submittedAt' : r['submitted_at'],
         })
@@ -151,7 +159,7 @@ class PullRequestWalker:
         'recordTimestamp' : ToISO(now),
         'additions' : pr['additions'],
         'deletions' : pr['deletions'],
-        'author' : pr.get('user', {}).get('login'),
+        'author' : ExractUser(pr),
         'state' : pr['state'],
         'createdAt' : pr['created_at'],
         'updatedAt' : pr['updated_at'],
