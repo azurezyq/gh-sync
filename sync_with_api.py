@@ -159,7 +159,7 @@ class PullRequestWalker:
         'recordTimestamp' : ToISO(now),
         'additions' : pr['additions'],
         'deletions' : pr['deletions'],
-        'author' : ExractUser(pr),
+        'author' : ExtractUser(pr),
         'state' : pr['state'],
         'createdAt' : pr['created_at'],
         'updatedAt' : pr['updated_at'],
