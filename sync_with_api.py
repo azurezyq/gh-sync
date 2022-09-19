@@ -138,7 +138,7 @@ class PullRequestWalker:
     rs = []
     for r in self.gh.GetReviews(owner, repo, pr['number']):
       rs.append({
-        'user' : r.get('user', {}).get('login')
+        'user' : r.get('user', {}).get('login'),
         'state' : r['state'],
         'submittedAt' : r['submitted_at'],
         })
