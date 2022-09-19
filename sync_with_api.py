@@ -208,8 +208,10 @@ if __name__ == '__main__':
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
   if args.out:
+    logging.info('Uploader: FileUploader')
     uploader = FileUploader(args.out)
   else:
+    logging.info('Uploader: BigQueryUploader')
     uploader = BigQueryUploader(args.bq_table, args.bq_schema)
   w = PullRequestWalker(gh, uploader, known=ParseProgress(args.progress_file), excluded_users=args.exclude_users.strip().split(','))
   repo_pairs = []
