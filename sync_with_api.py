@@ -12,6 +12,7 @@ import copy
 import subprocess
 import logging
 import sys
+import threading
 
 FORMAT = '%(asctime)s %(filename)s:%(lineno)s %(funcName)s %(message)s'
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
@@ -238,4 +239,19 @@ if __name__ == '__main__':
       continue
     unique_repo_pairs.append(x)
     dedup_set.add(x)
-  w.WalkPullRequests(unique_repo_pairs)
+
+  N_SHARDS = 4
+  shards = []
+  for n in range(N_SHARDS):
+    shards.append(unique_repo_pairs[n::N_SHARDS])
+  threads = []
+  for shard in shards:
+    def func(shard):
+      gh = GHClient(os.environ['GITHUB_TOKEN'])
+      w = PullRequestWalker(gh, uploader, known=ParseProgress(args.progress_file), excluded_users=args.exclude_users.strip().split(','))
+      w.WalkPullRequests(shard)
+    t = threading.Thread(target=func, args=(shard,))
+    t.start()
+    threads.append(t)
+  for t in threads:
+    t.join()
