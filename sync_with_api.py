@@ -95,7 +95,7 @@ class GHClient:
     return self._ListMultiPage(f'/orgs/{owner}/repos', {'type' : 'all'})
 
   def ListPulls(self, owner, repo):
-    return self._ListMultiPage(f'/repos/{owner}/{repo}/pulls', {'state' : 'all', 'sort' : 'updated'})
+    return self._ListMultiPage(f'/repos/{owner}/{repo}/pulls', {'state' : 'all', 'sort' : 'updated', 'direction' : 'desc'})
 
   def GetPull(self, owner, repo, number):
     return self._Get(f'/repos/{owner}/{repo}/pulls/{number}')
