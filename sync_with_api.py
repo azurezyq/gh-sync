@@ -217,6 +217,7 @@ if __name__ == '__main__':
   parser.add_argument('--bq_schema', type=str, nargs='?', default='schema_extended.json')
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
+  logging.info('Rate-limit: %s', gh.GetRateLimit())
   if args.out:
     logging.info('Uploader: FileUploader')
     uploader = FileUploader(args.out)
