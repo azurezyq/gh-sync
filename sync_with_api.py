@@ -12,6 +12,7 @@ import copy
 import subprocess
 import logging
 import sys
+import pprint
 
 FORMAT = '%(asctime)s %(filename)s:%(lineno)s %(funcName)s %(message)s'
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
@@ -51,9 +52,12 @@ def ParseProgress(progress_file):
   return d
 
 
-def Execute(cmd):
+def Execute(cmd, need_output=False):
   logging.info('Execute %s', cmd)
-  return subprocess.check_call(cmd, shell=True)
+  if need_output:
+    return subprocess.check_output(cmd, shell=True)
+  else:
+    return subprocess.check_call(cmd, shell=True)
 
 
 class GHClient:
@@ -96,6 +100,9 @@ class GHClient:
   def GetPull(self, owner, repo, number):
     return self._Get(f'/repos/{owner}/{repo}/pulls/{number}')
 
+  def GetRepo(self, owner, repo):
+    return self._Get(f'/repos/{owner}/{repo}')
+
   def GetReviews(self, owner, repo, number):
     return self._ListMultiPage(f'/repos/{owner}/{repo}/pulls/{number}/reviews')
 
@@ -137,11 +144,28 @@ class FileUploader:
 
 
 class PullRequestWalker:
-  def __init__(self, github_client, uploader, known={}, excluded_users=[]):
+  def __init__(self, github_client, uploader, known={}, excluded_users=[], gcs_state_file=None):
     self.gh = github_client
     self.known = known
     self.excluded_users = excluded_users
     self.uploader = uploader
+    self.gcs_state_file = gcs_state_file
+    self.LoadState()
+
+  def LoadState(self):
+    if self.gcs_state_file:
+      Execute(f'if ! gsutil stat {self.gcs_state_file} ; then echo {{\\"repos\\":{{}}}}|gsutil cp - {self.gcs_state_file}; fi')
+      self.state = json.loads(Execute(f'gsutil cat {self.gcs_state_file}', need_output=True).decode('utf8'))
+    else:
+      self.state = {'repos' : {}}
+    pprint.pprint(self.state)
+
+  def SaveState(self):
+    if self.gcs_state_file:
+      with open('/tmp/state.json', 'w') as f:
+        f.write(json.dumps(self.state, indent=True))
+      Execute(f'gsutil cp /tmp/state.json {self.gcs_state_file}')
+
 
   def GetReviews(self, owner, repo, pr):
     rs = []
@@ -173,9 +197,22 @@ class PullRequestWalker:
         'owner' : owner,
         }
 
+  def GetRepoLastestPrUpdated(self, owner, repo):
+    for pr in self.gh.ListPulls(owner, repo):
+      return pr['updated_at']
+    return None
+
   def GetPullRequests(self, owner, repo):
+    k = f'{owner}/{repo}'
+    repo_updated_at = self.GetRepoLastestPrUpdated(owner, repo)
+    last_updated_at = self.state['repos'].get(k, {}).get('updated_at')
+    logging.info('%s, updated_at=%s, last_updated_at=%s', k, repo_updated_at, last_updated_at)
+
     for pr in self.gh.ListPulls(owner, repo):
       pr_id = pr['id']
+      if last_updated_at and pr['updated_at'] <= last_updated_at:
+        logging.info(f'all new updates are collected, break at {pr_id}')
+        break
       if self.known.get(pr_id, None) == pr['updated_at']:
         continue
       if pr['user']['login'] in self.excluded_users:
@@ -183,18 +220,22 @@ class PullRequestWalker:
       pr = self.gh.GetPull(owner, repo, pr['number'])
       o = self.ToObject(owner, repo, pr)
       yield o
+    self.state['repos'].setdefault(k, {})['updated_at'] = repo_updated_at
 
   def WalkPullRequests(self, repos):
     RL_REMAINING_THRESHOLD = 500
     UPLOAD_BATCH = 200
     prs = []
+    def UploadFunc(prs):
+      logging.info('uploaded %s records', len(prs))
+      self.uploader.Upload(prs)
+      self.SaveState()
     for owner, repo in repos:
-      logging.info('%s %s', repo, owner)
       rl_hit = False
       for pr in self.GetPullRequests(owner, repo):
         prs.append(pr)
         if len(prs) > UPLOAD_BATCH:
-          self.uploader.Upload(prs)
+          UploadFunc(prs)
           prs = []
         if self.gh.GetRateLimitRemainingCached() < RL_REMAINING_THRESHOLD:
           logging.warning('rate limit hit, finish for now.')
@@ -203,7 +244,7 @@ class PullRequestWalker:
       if rl_hit:
         break
     if prs:
-      self.uploader.Upload(prs)
+      UploadFunc(prs)
 
 
 if __name__ == '__main__':
@@ -214,6 +255,7 @@ if __name__ == '__main__':
   parser.add_argument('--progress_file', type=str, nargs='?', default='')
   parser.add_argument('--bq_table', type=str, nargs='?', default='github.pull_requests_exp')
   parser.add_argument('--bq_schema', type=str, nargs='?', default='schema_extended.json')
+  parser.add_argument('--gcs_state_file', type=str, nargs='?', default='state.json')
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
   logging.info('Rate-limit: %s', gh.GetRateLimit())
@@ -223,7 +265,7 @@ if __name__ == '__main__':
   else:
     logging.info('Uploader: BigQueryUploader')
     uploader = BigQueryUploader(args.bq_table, args.bq_schema)
-  w = PullRequestWalker(gh, uploader, known=ParseProgress(args.progress_file), excluded_users=args.exclude_users.strip().split(','))
+  w = PullRequestWalker(gh, uploader, known=ParseProgress(args.progress_file), excluded_users=args.exclude_users.strip().split(','), gcs_state_file=args.gcs_state_file)
   repo_pairs = []
   for selector in args.selectors.strip().split(','):
     owner, repo = selector.split('/')
