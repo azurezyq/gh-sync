@@ -21,7 +21,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
 def ExtractUser(x):
   u = x.get('user')
   if u:
-    return x.get('login')
+    return u.get('login')
   else:
     return None
 

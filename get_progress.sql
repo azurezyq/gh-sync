@@ -1,1 +1,1 @@
-SELECT id, FORMAT_TIMESTAMP('%Y-%m-%dT%XZ', updatedAt, 'UTC') as updatedAt FROM `pingcap-gardener.github.pull_requests_exp`
+SELECT id, FORMAT_TIMESTAMP('%Y-%m-%dT%XZ', updatedAt, 'UTC') as updatedAt FROM `pingcap-gardener.github.pull_requests_exp` WHERE user is not NULL
