@@ -216,7 +216,7 @@ class PullRequestWalker:
       rs.append({
         'user' : ExtractUser(r),
         'state' : r['state'],
-        'submittedAt' : r['submitted_at'],
+        'submittedAt' : r.get('submitted_at'),
         })
     return rs
 
