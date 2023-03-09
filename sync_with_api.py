@@ -13,6 +13,7 @@ import subprocess
 import logging
 import sys
 import pprint
+import pymysql
 
 FORMAT = '%(asctime)s %(filename)s:%(lineno)s %(funcName)s %(message)s'
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FORMAT)
@@ -128,6 +129,48 @@ class BigQueryUploader:
         json.dump(pr, fp)
         fp.write('\n')
     Execute(f'bq load --source_format=NEWLINE_DELIMITED_JSON --format=json {self.table} /tmp/result_bq.jsonl {self.schema}')
+
+class MysqlUplaoder:
+  def __init__(self, params, create_table_stmt):
+    self.create_table_stmt = create_table_stmt
+    self.params = params
+
+  def Upload(self, prs):
+    if not prs:
+      return
+    p = self.params
+    db_user = p['SQL_USERNAME']
+    db_password = p['SQL_PASSWORD']
+    db_port = int(p['SQL_PORT'])
+    db_address = p['SQL_ADDRESS']
+    db_name = p['SQL_DB_NAME']
+    cnx = pymysql.connect(user=db_user, password=db_password,
+        host=db_address, db=db_name, port=db_port, autocommit=True)
+    with cnx.cursor() as cursor:
+      cursor.execute(self.create_table_stmt)
+      INSERT_STMT = '''
+      INSERT INTO pr(pr_id, recordTimestamp, additions, deletions, author, state, createdAt, updatedAt, closedAt, title, url, body, owner, repo, reviews)
+      VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+      '''
+      for pr in prs:
+        args = (
+            pr['id'],
+            pr['recordTimestamp'],
+            pr['additions'],
+            pr['deletions'],
+            pr['author'],
+            pr['state'],
+            pr['createdAt'],
+            pr['updatedAt'],
+            pr['closedAt'],
+            pr['title'],
+            pr['url'],
+            '', # pr['body'], save storage space for now.
+            pr['owner'],
+            pr['repo'],
+            json.dumps(pr['reviews'], indent=True)
+            )
+        cursor.execute(INSERT_STMT, args)
 
 
 class FileUploader:
@@ -256,12 +299,20 @@ if __name__ == '__main__':
   parser.add_argument('--bq_table', type=str, nargs='?', default='github.pull_requests_exp')
   parser.add_argument('--bq_schema', type=str, nargs='?', default='schema_extended.json')
   parser.add_argument('--gcs_state_file', type=str, nargs='?', default='state.json')
+  parser.add_argument('--mysql', type=bool, nargs='?', default=False)
   args = parser.parse_args()
   gh = GHClient(os.environ['GITHUB_TOKEN'])
   logging.info('Rate-limit: %s', gh.GetRateLimit())
+  logging.info(args.mysql)
   if args.out:
     logging.info('Uploader: FileUploader')
     uploader = FileUploader(args.out)
+  elif args.mysql:
+    logging.info('Uplaoder: MySQL')
+    params = os.environ['MYSQL_PARAMS']
+    logging.info(params)
+    params = dict([x.split('=') for x in params.split(',')])
+    uploader = MysqlUplaoder(params, open('create_table.sql').read())
   else:
     logging.info('Uploader: BigQueryUploader')
     uploader = BigQueryUploader(args.bq_table, args.bq_schema)
