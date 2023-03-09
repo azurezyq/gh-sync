@@ -7,7 +7,7 @@ steps:
   args: ['-c', 'bq query --nouse_legacy_sql --format=csv --max_rows=100000000 <get_progress.sql >progress.csv']
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'bash'
-  args: ['-c', './sync_with_api.py --selectors=pingcap-inc/*,tidbcloud/*,pingcap/*,tikv/* --progress_file=progress.csv --bq_table=github.pull_requests_exp --bq_schema=schema_extended.json --gcs_state_file=gs://yunqing-test/gh-sync/prod_state']
+  args: ['-c', './sync_with_api.py --selectors=pingcap-inc/*,pingcap-qe/*,tidbcloud/*,pingcap/*,tikv/* --progress_file=progress.csv --bq_table=github.pull_requests_exp --bq_schema=schema_extended.json --gcs_state_file=gs://yunqing-test/gh-sync/prod_state']
   secretEnv: ['GITHUB_TOKEN']
 availableSecrets:
   secretManager:
